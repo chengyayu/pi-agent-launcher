@@ -42,6 +42,19 @@ One-click [Pi coding agent](https://pi.dev) launcher for JetBrains IDEs — open
 - **Auto-open files** — Toggle auto-opening modified files
 - **Notifications** — Toggle completion notifications
 
+## Troubleshooting: IDE freeze
+
+Some GoLand 2026.2 builds freeze because of a platform-level read/write-lock deadlock
+(see [GO-20886](https://youtrack.jetbrains.com/issue/GO-20886) and
+[IJPL-252277](https://youtrack.jetbrains.com/issue/IJPL-252277)). The plugin used to
+trigger it: VFS change notifications were handled on a background thread, opening an
+editor or a diff for every single write, including writes made by `go build` or
+`gofmt`. Since 0.1.5 the plugin debounces and filters those events and performs all
+editor work on the EDT, so it no longer contributes to the deadlock.
+
+If the IDE still freezes on its own, update/roll back GoLand and, in the meantime,
+disable **Settings → Tools → Pi Agent → Auto-open files**.
+
 ## Supported IDEs
 
 Works with all JetBrains IDEs: IntelliJ IDEA, GoLand, PyCharm, WebStorm, PhpStorm, CLion, Rider, RubyMine, and more.

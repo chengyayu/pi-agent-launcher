@@ -46,6 +46,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+    <h3>0.1.5</h3>
+    <ul>
+        <li>Fixed IDE freezes caused by VFS file-change handling: editor/diff opening is now debounced and always run on the EDT</li>
+        <li>Auto-open now ignores excluded, ignored and binary files and skips the editor while indexing</li>
+        <li>Diff preview is shown at most once per file instead of on every write</li>
+    </ul>
     <h3>0.1.1</h3>
     <ul>
         <li>Pi now opens as a tab inside the Terminal tool window (alongside Local)</li>

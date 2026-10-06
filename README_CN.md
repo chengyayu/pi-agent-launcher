@@ -40,6 +40,12 @@
 - **Auto-open files** — 是否自动打开修改的文件
 - **Notifications** — 是否显示完成通知
 
+## 常见问题：IDE 卡死
+
+部分 GoLand 2026.2 会因平台级读写锁死锁而卡死（见 [GO-20886](https://youtrack.jetbrains.com/issue/GO-20886) 和 [IJPL-252277](https://youtrack.jetbrains.com/issue/IJPL-252277)）。插件以前会触发它：VFS 变更通知在后台线程处理，并且每次写入（包括 `go build`、`gofmt` 产生的写入）都会打开编辑器或 diff。自 0.1.5 起，插件对这些事件做了防抖与过滤，且所有编辑器操作都在 EDT 上执行，不再参与该死锁。
+
+如果 IDE 仍然自行卡死，请升级或回退 GoLand，并临时关闭 **Settings → Tools → Pi Agent → Auto-open files**。
+
 ## 支持的 IDE
 
 支持所有 JetBrains IDE：IntelliJ IDEA、GoLand、PyCharm、WebStorm、PhpStorm、CLion、Rider、RubyMine 等。
