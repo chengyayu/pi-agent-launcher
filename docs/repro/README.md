@@ -113,3 +113,28 @@ fun showDiff(filePath: String) {
 0.1.5 因为改到 EDT + 防抖，反而**能正常、稳定地展示 1 个 diff**。
 
 即：**修复不只是"少弹几个 diff"，而是"少了一条不断冲击读写锁的后台路径"。**
+
+## 结语：最终改为完全静默（0.1.5 最终形态）
+
+后续实测发现「每个文件 1 个 diff」在真实场景下仍然不可用：
+
+- 一次 session 改 100 个文件，若这些文件都被 `@` 引用过，就会弹 100 个标签
+- 自动弹窗会抢焦点，打断正在阅读的代码
+- 实测中同一批次还出现过「3 个文件只弹了 2 个」——源于 `PiChangeDebouncer`
+  的一个竞态：`flush()` 把 pending 取走与清空之间没有原子性，
+  `submit()` 落在这个窗口里会看到非空集合、跳过调度，随后被 `clear()` 抹掉
+
+因此最终设计改为：
+
+- **彻底删除 `PiDiffWatcher`，插件不再自动打开任何 diff**
+- 删除「Pi modified N files」完成通知
+- `Auto-open files` 保留但默认关闭（开启时也只开普通编辑器标签，且带防抖/过滤/上限/EDT）
+- `Send to Pi` 只负责插入 `@file#Lx-y` 引用
+- 想看改动：自己 `git diff`
+
+同时修掉两处正确性问题：
+
+1. `PiChangeDebouncer` 用 `AtomicReference.getAndSet` 原子取走 pending，
+   `submit()` 先加入再判断是否调度 → 消除丢事件
+2. flush 回调可返回「未能处理的路径」，debouncer 用更长延迟重新入队 →
+   索引期间不再永久丢弃
