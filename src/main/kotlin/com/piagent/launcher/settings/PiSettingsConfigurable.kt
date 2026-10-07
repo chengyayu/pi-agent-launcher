@@ -60,7 +60,7 @@ class PiSettingsConfigurable : Configurable {
             preferredSize = java.awt.Dimension(400, preferredSize.height)
         }
         extraArgsField = JBTextField(settings.extraArgs)
-        autoOpenFilesCheckbox = JCheckBox("Auto-open files modified by Pi", settings.autoOpenFiles)
+        autoOpenFilesCheckbox = JCheckBox("Auto-open files modified by Pi (off by default)", settings.autoOpenFiles)
         showNotificationsCheckbox = JCheckBox("Show notification when Pi finishes", settings.showNotifications)
 
         panel = FormBuilder.createFormBuilder()
@@ -126,7 +126,7 @@ class PiSettingsConfigurable : Configurable {
                 customModelId = customModelField?.text ?: "",
                 thinkingLevel = thinkingLevelCombo?.selectedItem as? String ?: "Default",
                 extraArgs = extraArgsField?.text ?: "",
-                autoOpenFiles = autoOpenFilesCheckbox?.isSelected ?: true,
+                autoOpenFiles = autoOpenFilesCheckbox?.isSelected ?: false,
                 showNotifications = showNotificationsCheckbox?.isSelected ?: true
             )
         )

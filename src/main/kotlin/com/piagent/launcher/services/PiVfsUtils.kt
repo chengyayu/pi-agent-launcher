@@ -1,27 +1,25 @@
 package com.piagent.launcher.services
 
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.openapi.vfs.VirtualFile
 
 /**
  * Shared helpers deciding whether a VFS change is something the Pi plugin
  * should react to.
  *
- * Guarding the watchers with these checks is what keeps a `go build` /
- * `gofmt -w ./...` / `git checkout` inside the project from opening hundreds
- * of editors (and, on GoLand 2026.2, from triggering the platform's
- * read/write-lock deadlock around [EditorHistoryManager] and index reparse).
+ * Keeping these guards in place is what stops a `go build` / `gofmt -w ./...` /
+ * `git checkout` inside the project from touching the editor for hundreds of
+ * files at once.
  */
 object PiVfsUtils {
 
     /**
-     * A change is relevant only when it is a real, text content change of a
-     * file that belongs to the project's content (not an excluded directory,
-     * not ignored by VCS/file-type rules, not binary).
+     * A change is relevant only when it is a real content change of a file that
+     * belongs to the project's content (not an excluded directory, not ignored
+     * by VCS/file-type rules, not binary).
      *
      * Safe to call from a background thread (VFS change listener thread).
      */
@@ -38,9 +36,5 @@ object PiVfsUtils {
         if (file.fileType.isBinary) return false
 
         return true
-    }
-
-    fun runOnEdt(action: () -> Unit) {
-        ApplicationManager.getApplication().invokeLater(action)
     }
 }

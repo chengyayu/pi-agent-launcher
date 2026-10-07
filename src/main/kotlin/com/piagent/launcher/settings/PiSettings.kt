@@ -21,7 +21,7 @@ class PiSettings : PersistentStateComponent<PiSettings.State> {
         var model: String = "Default",
         var customModelId: String = "",
         var thinkingLevel: String = "Default",
-        var autoOpenFiles: Boolean = true,
+        var autoOpenFiles: Boolean = false,
         var showNotifications: Boolean = true,
         var shellPath: String = "",
         var extraArgs: String = ""

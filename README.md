@@ -12,9 +12,17 @@ One-click [Pi coding agent](https://pi.dev) launcher for JetBrains IDEs — open
 - **One-click launch** — Click the π button in the toolbar to start Pi
 - **Terminal integration** — Pi runs as a tab inside the IDE's Terminal window (alongside Local)
 - **Send to Pi** — Select code → Right-click → "Send to Pi" inserts `@path/file.go#L10-25` into Pi's input
-- **Auto-open files** — Files modified by Pi automatically open in the editor
 - **Completion notifications** — Get notified when Pi finishes
 - **Model configuration** — Pick model and thinking level from `~/.pi/agent/models.json`
+
+### No diff pop-ups by design
+
+Pi sessions routinely rewrite dozens of files. The plugin deliberately opens **no**
+diff editor and shows **no** per-file notification for those changes — surfacing
+100 modified files as 100 editor tabs is unusable. Review the work with `git diff`.
+
+If you do want modified files opened as ordinary editor tabs, opt in via
+**Settings → Tools → Pi Agent → Auto-open files** (off by default).
 
 ## Keyboard Shortcuts
 
@@ -39,21 +47,21 @@ One-click [Pi coding agent](https://pi.dev) launcher for JetBrains IDEs — open
 - **Thinking level** — Default / none / low / medium / high / max
 - **Pi command** — Custom path to pi binary
 - **Extra arguments** — Additional CLI flags
-- **Auto-open files** — Toggle auto-opening modified files
+- **Auto-open files** — Off by default. When enabled, opens modified files as ordinary editor tabs (never diffs), debounced and capped.
 - **Notifications** — Toggle completion notifications
 
 ## Troubleshooting: IDE freeze
 
 Some GoLand 2026.2 builds freeze because of a platform-level read/write-lock deadlock
 (see [GO-20886](https://youtrack.jetbrains.com/issue/GO-20886) and
-[IJPL-252277](https://youtrack.jetbrains.com/issue/IJPL-252277)). The plugin used to
-trigger it: VFS change notifications were handled on a background thread, opening an
-editor or a diff for every single write, including writes made by `go build` or
-`gofmt`. Since 0.1.5 the plugin debounces and filters those events and performs all
-editor work on the EDT, so it no longer contributes to the deadlock.
+[IJPL-252277](https://youtrack.jetbrains.com/issue/IJPL-252277)). Earlier versions of
+this plugin contributed to it: VFS change notifications were handled on a background
+thread, opening an editor or a diff on every single write — including writes made by
+`go build` or `gofmt`.
 
-If the IDE still freezes on its own, update/roll back GoLand and, in the meantime,
-disable **Settings → Tools → Pi Agent → Auto-open files**.
+Since 0.1.5 the plugin no longer opens diffs at all, only touches the editor when you
+explicitly enable *Auto-open files*, and does that on the EDT with debouncing and
+filtering. If the IDE still freezes, update or roll back GoLand.
 
 ## Supported IDEs
 
@@ -82,8 +90,9 @@ src/main/kotlin/com/piagent/launcher/
 │   └── SendSelectionAction.kt     # Send @file#L reference
 ├── services/
 │   ├── PiTerminalService.kt       # Terminal lifecycle + send text
-│   ├── PiDiffWatcher.kt           # File change → diff preview
-│   └── PiFileWatcher.kt           # Auto-open + notifications
+│   ├── PiVfsUtils.kt              # VFS change filtering helpers
+│   ├── PiChangeDebouncer.kt       # Coalesces write bursts onto the EDT
+│   └── PiFileWatcher.kt           # Optional auto-open (off by default)
 └── settings/
     ├── PiSettings.kt              # Persistent config
     ├── PiSettingsConfigurable.kt  # Settings UI panel

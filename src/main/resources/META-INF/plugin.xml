@@ -75,7 +75,6 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <projectService serviceImplementation="com.piagent.launcher.services.PiTerminalService"/>
-        <projectService serviceImplementation="com.piagent.launcher.services.PiDiffWatcher"/>
         <projectService serviceImplementation="com.piagent.launcher.services.PiFileWatcher"/>
 
         <applicationService serviceImplementation="com.piagent.launcher.settings.PiSettings"/>

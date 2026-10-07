@@ -1,6 +1,5 @@
 package com.piagent.launcher.actions
 
-import com.piagent.launcher.services.PiDiffWatcher
 import com.piagent.launcher.services.PiTerminalService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -54,11 +53,6 @@ class SendSelectionAction : AnAction() {
         if (!service.isReady()) {
             service.launch()
         }
-
-        // Start diff watching
-        val diffWatcher = PiDiffWatcher.getInstance(project)
-        diffWatcher.snapshotFile(filePath)
-        diffWatcher.startWatching()
 
         // Insert reference into terminal input (don't execute)
         service.insertText(reference)

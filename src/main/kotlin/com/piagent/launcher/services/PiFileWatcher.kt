@@ -1,8 +1,6 @@
 package com.piagent.launcher.services
 
 import com.piagent.launcher.settings.PiSettings
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -17,39 +15,43 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.messages.MessageBusConnection
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Watches for file changes made by Pi.
- * - Auto-opens modified files in the editor
- * - Shows notification when Pi finishes modifying files
  *
- * VFS change notifications arrive on a background thread and fire once per
- * write. Opening an editor from that thread (and doing it for every file the
- * project touches, e.g. during `go build` / indexing) is what used to freeze
- * the IDE, so all editor work is debounced and dispatched to the EDT here.
+ * The plugin deliberately does **not** open diffs or notifications for those
+ * changes: a single Pi session can rewrite dozens of files, and surfacing all
+ * of them as editor tabs is unusable. Use `git diff` to review the work.
+ *
+ * The only thing left here is the optional "auto-open files" convenience, which
+ * is off by default and, when enabled, is debounced, filtered, capped and
+ * dispatched to the EDT.
  */
 @Service(Service.Level.PROJECT)
 class PiFileWatcher(private val project: Project) : Disposable {
 
     private val logger = Logger.getInstance(PiFileWatcher::class.java)
-    private val modifiedFiles = ConcurrentHashMap.newKeySet<String>()
 
     @Volatile
     private var isWatching = false
     private var connection: MessageBusConnection? = null
 
     private val debouncer = PiChangeDebouncer(AUTO_OPEN_DEBOUNCE_MS) { paths ->
-        openChangedFiles(paths)
+        // During indexing the editor model must not be touched; report those
+        // paths back so the debouncer retries them instead of dropping them.
+        if (DumbService.getInstance(project).isDumb) {
+            paths
+        } else {
+            openChangedFiles(paths)
+            emptyList()
+        }
     }
 
     fun startWatching() {
         if (isWatching) return
         isWatching = true
-        modifiedFiles.clear()
         debouncer.clear()
 
-        // Disconnect previous listener if any
         connection?.disconnect()
 
         connection = project.messageBus.connect(this).also { conn ->
@@ -58,16 +60,13 @@ class PiFileWatcher(private val project: Project) : Disposable {
                 object : BulkFileListener {
                     override fun after(events: List<VFileEvent>) {
                         if (!isWatching) return
-                        val autoOpen = PiSettings.getInstance().state.autoOpenFiles
+                        if (!PiSettings.getInstance().state.autoOpenFiles) return
+
                         for (event in events) {
                             if (event !is VFileContentChangeEvent) continue
                             val file = event.file
                             if (!PiVfsUtils.isRelevantChange(project, file)) continue
-
-                            modifiedFiles.add(file.path)
-                            if (autoOpen) {
-                                debouncer.submit(file.path)
-                            }
+                            debouncer.submit(file.path)
                         }
                     }
                 }
@@ -83,33 +82,21 @@ class PiFileWatcher(private val project: Project) : Disposable {
         connection?.disconnect()
         connection = null
         debouncer.clear()
-
-        val settings = PiSettings.getInstance().state
-        if (settings.showNotifications && modifiedFiles.isNotEmpty()) {
-            showCompletionNotification()
-        }
-
-        modifiedFiles.clear()
     }
 
     /**
-     * Runs on the EDT. Opens at most [MAX_AUTO_OPEN_FILES] files per batch so
-     * a project-wide rewrite cannot flood the editor with hundreds of tabs.
+     * Runs on the EDT. Opens at most [MAX_AUTO_OPEN_FILES] files per batch so a
+     * project-wide rewrite cannot flood the editor with hundreds of tabs.
      */
     private fun openChangedFiles(paths: List<String>) {
         if (!isWatching) return
-
-        // Never touch the editor model while the IDE is indexing: it is both
-        // useless (the files are not yet available) and the exact window in
-        // which GoLand's lock deadlock is triggered.
-        if (DumbService.getInstance(project).isDumb) return
 
         val fileEditorManager = FileEditorManager.getInstance(project)
         var opened = 0
         for (path in paths) {
             if (opened >= MAX_AUTO_OPEN_FILES) break
 
-            val file = LocalFileSystem.getInstance().findFileByPath(path) ?: continue
+            val file: VirtualFile = LocalFileSystem.getInstance().findFileByPath(path) ?: continue
             if (!file.isValid) continue
             if (fileEditorManager.isFileOpen(file)) continue
 
@@ -118,26 +105,11 @@ class PiFileWatcher(private val project: Project) : Disposable {
         }
     }
 
-    private fun showCompletionNotification() {
-        val count = modifiedFiles.size
-        val message = if (count == 1) {
-            "Pi modified 1 file"
-        } else {
-            "Pi modified $count files"
-        }
-
-        NotificationGroupManager.getInstance()
-            .getNotificationGroup("Pi Agent")
-            .createNotification(message, NotificationType.INFORMATION)
-            .notify(project)
-    }
-
     override fun dispose() {
         isWatching = false
         connection?.disconnect()
         connection = null
         debouncer.dispose()
-        modifiedFiles.clear()
     }
 
     companion object {
