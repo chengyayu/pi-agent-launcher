@@ -3,18 +3,17 @@ package com.piagent.launcher.infrastructure
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindowManager
+import java.lang.reflect.Method
 import javax.swing.JComponent
 
 /**
  * [PiTerminalProvider] backed by the IDE's Terminal tool window.
  *
  * The terminal API is reached through reflection because it has changed shape
- * across platform versions; keeping all of that in one place means the rest of
- * the plugin never sees a `Class.forName`.
+ * across platform versions; keeping all of that here means the rest of the plugin
+ * never sees a `Class.forName`.
  */
 class IdeTerminalProvider(private val project: Project) : PiTerminalProvider {
-
-    private val logger = Logger.getInstance(IdeTerminalProvider::class.java)
 
     @Volatile
     private var created: PiTerminal? = null
@@ -27,6 +26,7 @@ class IdeTerminalProvider(private val project: Project) : PiTerminalProvider {
             .getMethod("createLocalShellWidget", String::class.java, String::class.java)
             .invoke(manager, workingDirectory, tabName)
             ?: error("createLocalShellWidget returned null")
+
         val terminal = ReflectiveTerminal(widget)
         created = terminal
         focusTerminalTab(tabName)
@@ -54,39 +54,27 @@ class IdeTerminalProvider(private val project: Project) : PiTerminalProvider {
     }
 
     /**
-     * Thin adapter over `ShellTerminalWidget`; every member is resolved lazily so
-     * a platform rename surfaces as a logged warning rather than a crash.
+     * Thin adapter over `ShellTerminalWidget`.
+     *
+     * Members are resolved by name so that a platform rename degrades to a logged
+     * warning instead of a crash at the call site.
      */
     private class ReflectiveTerminal(private val widget: Any) : PiTerminal {
 
         private val logger = Logger.getInstance(ReflectiveTerminal::class.java)
 
         override val component: JComponent by lazy {
-            widget.javaClass.getMethod("getComponent").invoke(widget) as JComponent
+            widget.javaClass.methodOrNull("getComponent")!!.invoke(widget) as JComponent
         }
 
         override fun isAttached(): Boolean = component.parent != null
 
-        override fun isProcessAlive(): Boolean = try {
-            val connector = widget.javaClass.getMethod("getTtyConnector").invoke(widget)
-            if (connector == null) {
-                false
-            } else {
-                connector.javaClass.getMethod("isConnected").invoke(connector) as Boolean
-            }
-        } catch (e: Exception) {
-            logger.debug("Terminal process state unavailable", e)
-            false
-        }
-
         override fun send(text: String, submit: Boolean) {
             try {
                 if (submit) {
-                    widget.javaClass.getMethod("executeCommand", String::class.java)
-                        .invoke(widget, text)
+                    widget.javaClass.getMethod("executeCommand", String::class.java).invoke(widget, text)
                 } else {
-                    val starter = widget.javaClass.getMethod("getTerminalStarter").invoke(widget)
-                        ?: return
+                    val starter = widget.javaClass.methodOrNull("getTerminalStarter")?.invoke(widget) ?: return
                     starter.javaClass
                         .getMethod("sendString", String::class.java, Boolean::class.javaPrimitiveType)
                         .invoke(starter, text, false)
@@ -94,6 +82,12 @@ class IdeTerminalProvider(private val project: Project) : PiTerminalProvider {
             } catch (e: Exception) {
                 logger.warn("Failed to send text to the Pi terminal: ${e.message}")
             }
+        }
+
+        private fun Class<*>.methodOrNull(name: String, vararg params: Class<*>): Method? = try {
+            getMethod(name, *params)
+        } catch (_: NoSuchMethodException) {
+            null
         }
     }
 

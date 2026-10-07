@@ -6,31 +6,33 @@ import javax.swing.JComponent
 /**
  * Settings → Tools → Pi Agent.
  *
- * Delegates the form itself to [PiSettingsForm]; this class only implements the
- * platform lifecycle contract.
+ * Instantiated reflectively by the platform, so it must keep a no-argument
+ * constructor; the form itself is delegated to [PiSettingsForm].
  */
-class PiSettingsConfigurable(
-    private val settings: PiSettings = PiSettings.getInstance()
-) : Configurable {
+class PiSettingsConfigurable : Configurable {
 
     private var form: PiSettingsForm? = null
 
     override fun getDisplayName(): String = "Pi Agent"
 
-    override fun createComponent(): JComponent =
-        PiSettingsForm(settings.state, PiSettingsForm.loadModelOptions())
+    override fun createComponent(): JComponent {
+        val settings = PiSettings.getInstance()
+        return PiSettingsForm(settings.state, PiSettingsForm.loadModelOptions())
             .also { form = it }
             .panel
+    }
 
-    override fun isModified(): Boolean =
-        form?.toState()?.let { it != settings.state } ?: false
+    override fun isModified(): Boolean {
+        val settings = PiSettings.getInstance().state
+        return form?.toState()?.let { it != settings } ?: false
+    }
 
     override fun apply() {
-        form?.toState()?.let { settings.loadState(it) }
+        form?.toState()?.let { PiSettings.getInstance().loadState(it) }
     }
 
     override fun reset() {
-        form?.populate(settings.state)
+        form?.populate(PiSettings.getInstance().state)
     }
 
     override fun disposeUIResources() {

@@ -29,7 +29,6 @@ internal class PiSettingsForm(
     private val thinkingLevelCombo = ComboBox(THINKING_LEVELS)
     private val extraArgsField = JBTextField()
     private val autoOpenFilesCheckbox = JCheckBox(AUTO_OPEN_LABEL, state.autoOpenFiles)
-    private val showNotificationsCheckbox = JCheckBox(NOTIFICATIONS_LABEL, state.showNotifications)
 
     val panel: JPanel = FormBuilder.createFormBuilder()
         .addSeparator()
@@ -46,7 +45,6 @@ internal class PiSettingsForm(
         .addSeparator()
         .addSectionLabel("Options")
         .addComponent(autoOpenFilesCheckbox, 1)
-        .addComponent(showNotificationsCheckbox, 1)
         .addComponentFillVertically(JPanel(), 0)
         .panel
         .also { form ->
@@ -64,7 +62,6 @@ internal class PiSettingsForm(
         thinkingLevelCombo.selectedItem = state.thinkingLevel
         extraArgsField.text = state.extraArgs
         autoOpenFilesCheckbox.isSelected = state.autoOpenFiles
-        showNotificationsCheckbox.isSelected = state.showNotifications
     }
 
     fun toState(): PiSettings.State = PiSettings.State(
@@ -73,14 +70,12 @@ internal class PiSettingsForm(
         customModelId = customModelField.text,
         thinkingLevel = thinkingLevelCombo.selectedItem as? String ?: PiLaunchOptions.DEFAULT_VALUE,
         extraArgs = extraArgsField.text,
-        autoOpenFiles = autoOpenFilesCheckbox.isSelected,
-        showNotifications = showNotificationsCheckbox.isSelected
+        autoOpenFiles = autoOpenFilesCheckbox.isSelected
     )
 
     companion object {
         private const val FIELD_WIDTH = 400
         private const val AUTO_OPEN_LABEL = "Auto-open files modified by Pi (off by default)"
-        private const val NOTIFICATIONS_LABEL = "Show notification when Pi finishes"
 
         val THINKING_LEVELS = arrayOf(
             PiLaunchOptions.DEFAULT_VALUE,

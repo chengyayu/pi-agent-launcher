@@ -5,17 +5,19 @@ import javax.swing.JComponent
 /**
  * The subset of a terminal tab that the plugin needs.
  *
- * Declaring it as an interface keeps the reflection-heavy JetBrains terminal
- * API out of the application layer and makes the session service testable with
- * a fake.
+ * Declaring it as an interface keeps the reflection-heavy JetBrains terminal API
+ * out of the application layer and makes the session logic testable with a fake.
+ *
+ * Note there is deliberately no "is the process still running?" member.
+ * For pty4j-backed local terminals the `TtyConnector` exposes a short-lived
+ * spawn helper rather than the interactive shell, so `isConnected()` is always
+ * false and any liveness probe reports bogus exits. See `PiSession` for how the
+ * plugin handles that.
  */
 interface PiTerminal {
 
     /** The Swing component hosting the terminal, used for focusing. */
     val component: JComponent
-
-    /** True while the underlying process is still attached. */
-    fun isProcessAlive(): Boolean
 
     /** Type [text] into the terminal, optionally submitting it. */
     fun send(text: String, submit: Boolean)
