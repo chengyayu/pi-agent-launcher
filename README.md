@@ -84,20 +84,41 @@ Works with all JetBrains IDEs: IntelliJ IDEA, GoLand, PyCharm, WebStorm, PhpStor
 
 ```
 src/main/kotlin/com/piagent/launcher/
-├── actions/
-│   ├── LaunchPiAction.kt          # Toolbar button → launch Pi
-│   ├── OpenPiAction.kt            # Cmd+Esc → focus Pi
-│   └── SendSelectionAction.kt     # Send @file#L reference
+├── domain/                        # Pure logic, no IDE types, unit tested
+│   ├── PiLaunchOptions.kt         # Inputs that determine how Pi starts
+│   ├── PiCommandLine.kt           # Renders options into the CLI command
+│   ├── PiFileReference.kt         # @path#L10-25 references
+│   └── PiModel.kt                 # Model advertised by the Pi CLI
+├── infrastructure/                # Adapters to the IDE and the filesystem
+│   ├── PiTerminal.kt              # Terminal interfaces (fakeable)
+│   ├── IdeTerminalProvider.kt     # Reflective Terminal tool window access
+│   ├── PiModelRepository.kt       # Reads ~/.pi/agent/models.json
+│   └── PiNotifier.kt              # Notification interface + IDE impl
+├── util/
+│   └── PiChangeDebouncer.kt       # Coalesces write bursts, IDE-free
 ├── services/
-│   ├── PiTerminalService.kt       # Terminal lifecycle + send text
-│   ├── PiVfsUtils.kt              # VFS change filtering helpers
-│   ├── PiChangeDebouncer.kt       # Coalesces write bursts onto the EDT
-│   └── PiFileWatcher.kt           # Optional auto-open (off by default)
+│   ├── PiSessionService.kt        # Terminal session lifecycle
+│   ├── PiSessionState.kt          # Observable status (topic)
+│   ├── PiProcessMonitor.kt        # Exit detection + command dispatch
+│   ├── PiFileWatcher.kt           # Optional auto-open (off by default)
+│   ├── PiStatusWidget.kt          # Status bar entry
+│   └── PiVfsUtils.kt              # VFS change filtering
+├── actions/                       # Extract input, delegate to a service
+│   ├── LaunchPiAction.kt
+│   ├── OpenPiAction.kt
+│   ├── SendSelectionAction.kt
+│   ├── SendFileToPiAction.kt
+│   └── PiPrompt.kt                # Shared reference insertion
 └── settings/
-    ├── PiSettings.kt              # Persistent config
-    ├── PiSettingsConfigurable.kt  # Settings UI panel
-    └── PiModelLoader.kt           # Load models from models.json
+    ├── PiSettings.kt              # Persisted state + domain mapping
+    ├── PiSettingsConfigurable.kt  # Settings UI shell
+    ├── PiSettingsForm.kt          # Swing form and state mapping
+    └── SettingsModelCatalog.kt    # Swappable model source
 ```
+
+The `domain` and `util` packages have no IntelliJ dependencies, so the argument
+handling, reference formatting and debouncing are covered by plain unit tests
+(`./gradlew test`).
 
 ## License
 

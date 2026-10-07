@@ -74,7 +74,7 @@
     <depends>org.jetbrains.plugins.terminal</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <projectService serviceImplementation="com.piagent.launcher.services.PiTerminalService"/>
+        <projectService serviceImplementation="com.piagent.launcher.services.PiSessionService"/>
         <projectService serviceImplementation="com.piagent.launcher.services.PiFileWatcher"/>
 
         <applicationService serviceImplementation="com.piagent.launcher.settings.PiSettings"/>

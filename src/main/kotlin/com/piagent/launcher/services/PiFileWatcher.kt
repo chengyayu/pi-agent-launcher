@@ -1,7 +1,7 @@
 package com.piagent.launcher.services
 
-import com.piagent.launcher.settings.PiSettings
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
@@ -15,17 +15,18 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileContentChangeEvent
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.util.messages.MessageBusConnection
+import com.piagent.launcher.settings.PiSettings
+import com.piagent.launcher.util.PiChangeDebouncer
 
 /**
  * Watches for file changes made by Pi.
  *
- * The plugin deliberately does **not** open diffs or notifications for those
- * changes: a single Pi session can rewrite dozens of files, and surfacing all
- * of them as editor tabs is unusable. Use `git diff` to review the work.
+ * The plugin deliberately opens **no** diff and shows **no** notification for
+ * those changes: a single Pi session can rewrite dozens of files, and surfacing
+ * them as editor tabs is unusable. Review the work with `git diff`.
  *
- * The only thing left here is the optional "auto-open files" convenience, which
- * is off by default and, when enabled, is debounced, filtered, capped and
- * dispatched to the EDT.
+ * What remains is the optional "auto-open files" convenience, which is off by
+ * default and, when enabled, is debounced, filtered, capped and run on the EDT.
  */
 @Service(Service.Level.PROJECT)
 class PiFileWatcher(private val project: Project) : Disposable {
@@ -36,15 +37,20 @@ class PiFileWatcher(private val project: Project) : Disposable {
     private var isWatching = false
     private var connection: MessageBusConnection? = null
 
-    private val debouncer = PiChangeDebouncer(AUTO_OPEN_DEBOUNCE_MS) { paths ->
-        // During indexing the editor model must not be touched; report those
-        // paths back so the debouncer retries them instead of dropping them.
-        if (DumbService.getInstance(project).isDumb) {
-            paths
-        } else {
-            openChangedFiles(paths)
-            emptyList()
-        }
+    private val debouncer = PiChangeDebouncer(
+        delayMs = AUTO_OPEN_DEBOUNCE_MS,
+        dispatch = { ApplicationManager.getApplication().invokeLater(it) },
+        onFlush = ::onFlush
+    )
+
+    /**
+     * Runs on the EDT. During indexing the editor model must not be touched, so
+     * the paths are handed back for a later retry instead of being dropped.
+     */
+    private fun onFlush(paths: List<String>): List<String> {
+        if (DumbService.getInstance(project).isDumb) return paths
+        openChangedFiles(paths)
+        return emptyList()
     }
 
     fun startWatching() {
@@ -62,10 +68,10 @@ class PiFileWatcher(private val project: Project) : Disposable {
                         if (!isWatching) return
                         if (!PiSettings.getInstance().state.autoOpenFiles) return
 
-                        for (event in events) {
-                            if (event !is VFileContentChangeEvent) continue
+                        events.forEach { event ->
+                            if (event !is VFileContentChangeEvent) return@forEach
                             val file = event.file
-                            if (!PiVfsUtils.isRelevantChange(project, file)) continue
+                            if (!PiVfsUtils.isRelevantChange(project, file)) return@forEach
                             debouncer.submit(file.path)
                         }
                     }
@@ -85,8 +91,8 @@ class PiFileWatcher(private val project: Project) : Disposable {
     }
 
     /**
-     * Runs on the EDT. Opens at most [MAX_AUTO_OPEN_FILES] files per batch so a
-     * project-wide rewrite cannot flood the editor with hundreds of tabs.
+     * Opens at most [MAX_AUTO_OPEN_FILES] files per batch so a project-wide
+     * rewrite cannot flood the editor with hundreds of tabs.
      */
     private fun openChangedFiles(paths: List<String>) {
         if (!isWatching) return
@@ -109,7 +115,7 @@ class PiFileWatcher(private val project: Project) : Disposable {
         isWatching = false
         connection?.disconnect()
         connection = null
-        debouncer.dispose()
+        debouncer.close()
     }
 
     companion object {

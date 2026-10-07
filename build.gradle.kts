@@ -21,6 +21,9 @@ dependencies {
         pluginVerifier()
         zipSigner()
     }
+
+    testImplementation(kotlin("test"))
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
@@ -43,6 +46,10 @@ tasks {
 
     buildSearchableOptions {
         enabled = false
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     signPlugin {
