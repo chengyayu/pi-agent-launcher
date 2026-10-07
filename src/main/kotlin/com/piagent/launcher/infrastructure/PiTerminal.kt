@@ -7,12 +7,6 @@ import javax.swing.JComponent
  *
  * Declaring it as an interface keeps the reflection-heavy JetBrains terminal API
  * out of the application layer and makes the session logic testable with a fake.
- *
- * Note there is deliberately no "is the process still running?" member.
- * For pty4j-backed local terminals the `TtyConnector` exposes a short-lived
- * spawn helper rather than the interactive shell, so `isConnected()` is always
- * false and any liveness probe reports bogus exits. See `PiSession` for how the
- * plugin handles that.
  */
 interface PiTerminal {
 
@@ -24,6 +18,15 @@ interface PiTerminal {
 
     /** True when the component is still attached to the UI hierarchy. */
     fun isAttached(): Boolean
+
+    /**
+     * Whether a foreground command is currently running in this terminal.
+     *
+     * `null` means the platform could not tell, in which case callers must keep
+     * their previous state: guessing here previously produced bogus "Pi exited"
+     * reports.
+     */
+    fun isForegroundCommandRunning(): Boolean?
 }
 
 /**

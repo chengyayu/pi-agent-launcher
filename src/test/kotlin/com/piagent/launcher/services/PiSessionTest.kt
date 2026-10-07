@@ -19,22 +19,42 @@ class PiSessionTest {
     private val notifier = FakeNotifier()
     private val statuses = CopyOnWriteArrayList<PiSessionStatus>()
 
+    /** Advanced by tests that exercise the startup grace period. */
+    private var clockMillis = 0L
+
     /** Runs scheduled work immediately so the tests stay synchronous. */
     private val immediateScheduler = PiScheduler { _, _, action ->
         action()
         NoopDisposable
     }
 
+    /**
+     * Sends the start command straight away but captures the repeating exit poll
+     * so a test can decide when (and whether) it runs.
+     */
+    private class ManualScheduler : PiScheduler {
+        var repeating: (() -> Unit)? = null
+
+        override fun schedule(delayMs: Int, repeat: Boolean, action: () -> Unit): Disposable {
+            if (repeat) repeating = action else action()
+            return NoopDisposable
+        }
+    }
+
     private fun newSession(
         workingDirectory: String = "/work",
-        options: PiLaunchOptions = PiLaunchOptions()
+        options: PiLaunchOptions = PiLaunchOptions(),
+        scheduler: PiScheduler = immediateScheduler,
+        clock: () -> Long = { clockMillis }
     ) = PiSession(
         workingDirectory = { workingDirectory },
         publishStatus = { statuses += it },
         terminals = terminals,
         notifier = notifier,
         launchOptions = { options },
-        commandDispatcher = PiCommandDispatcher(settleMillis = 0, scheduler = immediateScheduler)
+        commandDispatcher = PiCommandDispatcher(settleMillis = 0, scheduler = immediateScheduler),
+        scheduler = scheduler,
+        clock = clock
     )
 
     @Test
@@ -128,6 +148,96 @@ class PiSessionTest {
         assertEquals(1, terminals.lastTerminal?.sent?.size, "after reset nothing should be sent")
     }
 
+    @Test
+    fun `status falls back to idle once pi stops running`() {
+        val scheduler = ManualScheduler()
+        newSession(scheduler = scheduler, clock = { clockMillis }).use { session ->
+            session.launch()
+            assertEquals(PiSessionStatus.RUNNING, session.status)
+
+            terminals.lastTerminal!!.commandRunning = false
+            clockMillis += 10_000 // past the startup grace
+            repeat(2) { scheduler.repeating!!.invoke() }
+
+            assertFalse(session.isRunning(), "an exited Pi must not stay 'Running'")
+        }
+    }
+
+    @Test
+    fun `a single empty observation is not enough to call it exited`() {
+        val scheduler = ManualScheduler()
+        newSession(scheduler = scheduler, clock = { clockMillis }).use { session ->
+            session.launch()
+            clockMillis += 10_000
+
+            terminals.lastTerminal!!.commandRunning = false
+            scheduler.repeating!!.invoke()
+            assertTrue(session.isRunning(), "one gap must not end the session")
+
+            terminals.lastTerminal!!.commandRunning = true
+            scheduler.repeating!!.invoke()
+            assertTrue(session.isRunning())
+        }
+    }
+
+    @Test
+    fun `the startup grace protects against the shell having no child yet`() {
+        val scheduler = ManualScheduler()
+        newSession(scheduler = scheduler, clock = { clockMillis }).use { session ->
+            session.launch()
+
+            // Right after launch the shell has not spawned Pi yet.
+            terminals.lastTerminal!!.commandRunning = false
+            repeat(5) { scheduler.repeating!!.invoke() }
+
+            assertTrue(session.isRunning(), "Pi must not be reported exited before it could start")
+        }
+    }
+
+    @Test
+    fun `an unknown running state keeps the previous status`() {
+        val scheduler = ManualScheduler()
+        newSession(scheduler = scheduler, clock = { clockMillis }).use { session ->
+            session.launch()
+            clockMillis += 10_000
+
+            terminals.lastTerminal!!.commandRunning = null
+            repeat(3) { scheduler.repeating!!.invoke() }
+
+            assertTrue(session.isRunning(), "an unknown answer must not be treated as an exit")
+        }
+    }
+
+    @Test
+    fun `a running command keeps the session alive`() {
+        val scheduler = ManualScheduler()
+        newSession(scheduler = scheduler, clock = { clockMillis }).use { session ->
+            session.launch()
+            clockMillis += 10_000
+
+            terminals.lastTerminal!!.commandRunning = true
+            repeat(3) { scheduler.repeating!!.invoke() }
+
+            assertTrue(session.isRunning())
+        }
+    }
+
+    @Test
+    fun `the exit poll stops after reset`() {
+        val scheduler = ManualScheduler()
+        newSession(scheduler = scheduler).use { session ->
+            session.launch()
+            session.reset()
+
+            // Even if the platform reports the command is gone, a reset session
+            // must not publish another transition.
+            terminals.lastTerminal!!.commandRunning = false
+            scheduler.repeating?.invoke()
+
+            assertEquals(listOf(PiSessionStatus.RUNNING, PiSessionStatus.IDLE), statuses)
+        }
+    }
+
     // ---- fakes -------------------------------------------------------------
 
     private object NoopDisposable : Disposable {
@@ -162,8 +272,11 @@ class PiSessionTest {
 
         val sent = mutableListOf<Sent>()
         var attached = true
+        var commandRunning: Boolean? = true
 
         override val component: JComponent = JPanel()
+
+        override fun isForegroundCommandRunning(): Boolean? = commandRunning
 
         override fun send(text: String, submit: Boolean) {
             sent += Sent(text, submit)
